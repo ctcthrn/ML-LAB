@@ -65,7 +65,32 @@ class LinearRegression:
 
         """
         # TODO: реализовать подбор весов для x и y
-        raise NotImplementedError('Функция fit класса LinearRegression не реализована')
+
+        # Инициализация
+        self.descent.initialize_weights(x.shape[1])  # Инициализация весов в descent
+        self.loss_history.append(self.calc_loss(x, y))  # Запись начальной функции потерь
+
+        for iteration in range(self.max_iter):
+            # Сохраняем текущие веса для сравнения
+            current_weights = self.descent.weights.copy()
+
+            # Обновляем веса с помощью метода градиентного спуска
+            self.descent.update_weights(x, y)
+
+            # Записываем новое значение функции потерь
+            self.loss_history.append(self.calc_loss(x, y))
+
+            # Проверяем критерии остановки
+            weight_diff_norm = np.linalg.norm(self.descent.weights - current_weights)
+            if weight_diff_norm < self.tolerance:
+                print(f"Обучение завершено на итерации {iteration} (норма разности весов < tolerance).")
+                break
+
+            if np.any(np.isnan(self.descent.weights)):
+                print(f"Обучение завершено на итерации {iteration} (обнаружены NaN в весах).")
+                break
+
+        return self        
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         """
