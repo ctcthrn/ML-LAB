@@ -199,7 +199,9 @@ class BaseDescent:
         float
             Значение функции потерь.
         """
-        raise NotImplementedError('BaseDescent calc_loss function not implemented')
+        predictions = self.predict(x)
+        loss = np.mean((y - predictions) ** 2)
+        return loss
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         """
@@ -215,7 +217,7 @@ class BaseDescent:
         np.ndarray
             Прогнозируемые значения.
         """
-        raise NotImplementedError('BaseDescent predict function not implemented')
+        return np.dot(x, self.w)
 
 
 class VanillaGradientDescent(BaseDescent):
@@ -244,7 +246,10 @@ class VanillaGradientDescent(BaseDescent):
         np.ndarray
             Разность весов (w_{k + 1} - w_k).
         """
-        raise NotImplementedError('VanillaGradientDescent update_weights function not implemented')
+        step_size = self.lr()
+        weight_update = -step_size * gradient
+        self.w += weight_update
+        return weight_update
 
     def calc_gradient(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
@@ -262,7 +267,9 @@ class VanillaGradientDescent(BaseDescent):
         np.ndarray
             Градиент функции потерь по весам.
         """
-        raise NotImplementedError('VanillaGradientDescent calc_gradient function not implemented')
+        predictions = self.predict(x)
+        gradient = -2 * np.dot(x.T, (y - predictions)) / x.shape[0]
+        return gradient
 
 
 class StochasticDescent(VanillaGradientDescent):
@@ -307,7 +314,13 @@ class StochasticDescent(VanillaGradientDescent):
         np.ndarray
             Градиент функции потерь по весам, вычисленный по мини-пакету.
         """
-        raise NotImplementedError('StochasticDescent calc_gradient function not implemented')
+        batch_indices = np.random.randint(0, x.shape[0], self.batch_size)
+        x_batch = x[batch_indices]
+        y_batch = y[batch_indices]
+    
+        predictions = self.predict(x_batch)
+        gradient = -2 * np.dot(x_batch.T, (y_batch - predictions)) / self.batch_size
+        return gradient
 
 
 class MomentumDescent(VanillaGradientDescent):
@@ -369,7 +382,10 @@ class MomentumDescent(VanillaGradientDescent):
             Разность весов (w_{k + 1} - w_k).
         """
         # TODO: implement updating weights function
-        raise NotImplementedError('MomentumDescent update_weights function not implemented')
+        self.velocity = self.momentum * self.velocity + self.learning_rate * gradient
+        old_weights = self.weights.copy()
+        self.weights -= self.velocity
+        return self.weights - old_weights
 
 
 class Adam(VanillaGradientDescent):
@@ -444,7 +460,23 @@ class Adam(VanillaGradientDescent):
         np.ndarray
             Разность весов (w_{k + 1} - w_k).
         """
-        raise NotImplementedError('Adagrad update_weights function not implemented')
+        # Увеличиваем счетчик итераций
+        self.iteration += 1
+
+        # Обновление первого момента (m)
+        self.m = self.beta_1 * self.m + (1 - self.beta_1) * gradient
+
+        # Обновление второго момента (v)
+        self.v = self.beta_2 * self.v + (1 - self.beta_2) * (gradient ** 2)
+
+        # Коррекция смещений для моментов
+        m_hat = self.m / (1 - self.beta_1 ** self.iteration)
+        v_hat = self.v / (1 - self.beta_2 ** self.iteration)
+
+        # Вычисление обновления весов
+        weight_update = -self.lambda_ * m_hat / (np.sqrt(v_hat) + self.eps)
+
+        return weight_update
 
 
 class BaseDescentReg(BaseDescent):
