@@ -66,31 +66,44 @@ class LinearRegression:
         """
         # TODO: реализовать подбор весов для x и y
 
-        # Инициализация
-        self.descent.initialize_weights(x.shape[1])  # Инициализация весов в descent
-        self.loss_history.append(self.calc_loss(x, y))  # Запись начальной функции потерь
+        # Начальные веса устанавливаются случайным образом
+        weights = np.random.randn(x.shape[1])
 
-        for iteration in range(self.max_iter):
-            # Сохраняем текущие веса для сравнения
-            current_weights = self.descent.weights.copy()
+        # Сохраняем начальное значение функции потерь перед началом обучения
+        initial_loss = self.calc_loss(x, y)
+        self.loss_history.append(initial_loss)
 
-            # Обновляем веса с помощью метода градиентного спуска
-            self.descent.update_weights(x, y)
+        for i in range(self.max_iter):
+            # Вычисляем градиенты для текущего вектора весов
+            gradients = self.descent.calc_gradient(x, y)
 
-            # Записываем новое значение функции потерь
-            self.loss_history.append(self.calc_loss(x, y))
+            # Обновляем веса
+            new_weights = self.descent.update_weights(gradients)
 
-            # Проверяем критерии остановки
-            weight_diff_norm = np.linalg.norm(self.descent.weights - current_weights)
-            if weight_diff_norm < self.tolerance:
-                print(f"Обучение завершено на итерации {iteration} (норма разности весов < tolerance).")
+            # Проверка условия остановки по наличию NaN в весах
+            if np.isnan(new_weights).any():
+                print("Вес содержит NaN, обучение остановлено.")
                 break
 
-            if np.any(np.isnan(self.descent.weights)):
-                print(f"Обучение завершено на итерации {iteration} (обнаружены NaN в весах).")
+            # Вычисление разницы между текущими и новыми весами
+            diff_norm = np.linalg.norm(new_weights - weights)
+
+            # Проверка условия остановки по норме разности весов
+            if diff_norm <= self.tolerance:
+                print(f"Евклидова норма разности весов достигла {diff_norm:.6f}, обучение остановлено.")
                 break
 
-        return self        
+            # Обновляем веса
+            weights = new_weights
+
+            # Запись нового значения функции потерь
+            current_loss = self.calc_loss(x, y)
+            self.loss_history.append(current_loss)
+
+        # После завершения обучения сохраняем финальные веса
+        self.descent.w = weights
+
+        return self
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         """

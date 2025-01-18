@@ -1,11 +1,9 @@
+import numpy as np
 from dataclasses import dataclass
 from enum import auto
 from enum import Enum
 from typing import Dict
 from typing import Type
-
-import numpy as np
-
 
 @dataclass
 class LearningRate:
@@ -31,7 +29,6 @@ class LearningRate:
     lambda_: float = 1e-3
     s0: float = 1
     p: float = 0.5
-
     iteration: int = 0
 
     def __call__(self):
@@ -45,7 +42,6 @@ class LearningRate:
         """
         self.iteration += 1
         return self.lambda_ * (self.s0 / (self.s0 + self.iteration)) ** self.p
-
 
 class LossFunction(Enum):
     """
@@ -66,7 +62,6 @@ class LossFunction(Enum):
     MAE = auto()
     LogCosh = auto()
     Huber = auto()
-
 
 class BaseDescent:
     """
@@ -146,7 +141,6 @@ class BaseDescent:
         np.ndarray
             Разность между текущими и обновленными весами.
         """
-
         return self.update_weights(self.calc_gradient(x, y))
 
     def update_weights(self, gradient: np.ndarray) -> np.ndarray:
@@ -199,8 +193,11 @@ class BaseDescent:
         float
             Значение функции потерь.
         """
-        predictions = self.predict(x)
-        loss = np.mean((y - predictions) ** 2)
+        y_pred = self.predict(x)
+        if self.loss_function == LossFunction.MSE:
+            loss = np.mean((y - y_pred) ** 2)
+        else:
+            raise ValueError(f'Unknown loss function {self.loss_function}')
         return loss
 
     def predict(self, x: np.ndarray) -> np.ndarray:
@@ -217,8 +214,7 @@ class BaseDescent:
         np.ndarray
             Прогнозируемые значения.
         """
-        return np.dot(x, self.w)
-
+        return x @ self.w
 
 class VanillaGradientDescent(BaseDescent):
     """
@@ -246,10 +242,10 @@ class VanillaGradientDescent(BaseDescent):
         np.ndarray
             Разность весов (w_{k + 1} - w_k).
         """
-        step_size = self.lr()
-        weight_update = -step_size * gradient
-        self.w += weight_update
-        return weight_update
+        eta = self.lr()  # Получаем длину шага
+        delta_w = -eta * gradient  # Вычисляем изменение весов
+        self.w += delta_w  # Обновляем веса
+        return delta_w  # Возвращаем разность весов
 
     def calc_gradient(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
@@ -267,10 +263,10 @@ class VanillaGradientDescent(BaseDescent):
         np.ndarray
             Градиент функции потерь по весам.
         """
-        predictions = self.predict(x)
-        gradient = -2 * np.dot(x.T, (y - predictions)) / x.shape[0]
+        y_pred = self.predict(x)  # Предсказываем значения
+        error = y_pred - y  # Ошибка предсказания
+        gradient = 2 * x.T.dot(error) / len(y)  # Вычисляем градиент для MSE
         return gradient
-
 
 class StochasticDescent(VanillaGradientDescent):
     """
@@ -294,7 +290,6 @@ class StochasticDescent(VanillaGradientDescent):
 
     def __init__(self, dimension: int, lambda_: float = 1e-3, batch_size: int = 50,
                  loss_function: LossFunction = LossFunction.MSE):
-
         super().__init__(dimension, lambda_, loss_function)
         self.batch_size = batch_size
 
@@ -314,14 +309,15 @@ class StochasticDescent(VanillaGradientDescent):
         np.ndarray
             Градиент функции потерь по весам, вычисленный по мини-пакету.
         """
-        batch_indices = np.random.randint(0, x.shape[0], self.batch_size)
-        x_batch = x[batch_indices]
-        y_batch = y[batch_indices]
-    
-        predictions = self.predict(x_batch)
-        gradient = -2 * np.dot(x_batch.T, (y_batch - predictions)) / self.batch_size
-        return gradient
+        indices = np.random.randint(low=0, high=x.shape[0], size=self.batch_size)  # Выборка индексов для батча
+        x_batch = x[indices]
+        y_batch = y[indices]
 
+        y_pred = self.predict(x_batch)  # Предсказываем значения для батча
+        error = y_pred - y_batch  # Ошибка предсказания для батча
+        gradient = 2 * x_batch.T.dot(error) / self.batch_size  # Вычисляем градиент для MSE на батче
+
+        return gradient
 
 class MomentumDescent(VanillaGradientDescent):
     """
@@ -364,7 +360,6 @@ class MomentumDescent(VanillaGradientDescent):
         """
         super().__init__(dimension, lambda_, loss_function)
         self.alpha: float = 0.9
-
         self.h: np.ndarray = np.zeros(dimension)
 
     def update_weights(self, gradient: np.ndarray) -> np.ndarray:
@@ -381,12 +376,11 @@ class MomentumDescent(VanillaGradientDescent):
         np.ndarray
             Разность весов (w_{k + 1} - w_k).
         """
-        # TODO: implement updating weights function
-        self.velocity = self.momentum * self.velocity + self.learning_rate * gradient
-        old_weights = self.weights.copy()
-        self.weights -= self.velocity
-        return self.weights - old_weights
-
+        eta = self.lr()  # Получаем длину шага
+        self.h = self.alpha * self.h + eta * gradient  # Обновляем момент
+        delta_w = -self.h  # Изменение весов
+        self.w += delta_w  # Обновляем веса
+        return delta_w  # Возвращаем разность весов
 
 class Adam(VanillaGradientDescent):
     """
@@ -462,10 +456,10 @@ class Adam(VanillaGradientDescent):
         """
         # Увеличиваем счетчик итераций
         self.iteration += 1
+        eta = self.lr()  # Получаем длину шага
 
         # Обновление первого момента (m)
         self.m = self.beta_1 * self.m + (1 - self.beta_1) * gradient
-
         # Обновление второго момента (v)
         self.v = self.beta_2 * self.v + (1 - self.beta_2) * (gradient ** 2)
 
@@ -474,10 +468,10 @@ class Adam(VanillaGradientDescent):
         v_hat = self.v / (1 - self.beta_2 ** self.iteration)
 
         # Вычисление обновления весов
-        weight_update = -self.lambda_ * m_hat / (np.sqrt(v_hat) + self.eps)
+        delta_w = -eta * m_hat / (np.sqrt(v_hat) + self.eps)
+        self.w += delta_w
 
-        return weight_update
-
+        return delta_w
 
 class BaseDescentReg(BaseDescent):
     """
@@ -527,34 +521,29 @@ class BaseDescentReg(BaseDescent):
         np.ndarray
             Градиент функции потерь с учетом L2 регуляризации по весам.
         """
-        l2_gradient: np.ndarray = np.zeros_like(x.shape[1])  
+        l2_gradient: np.ndarray = np.zeros_like(x.shape[1])
 
         return super().calc_gradient(x, y) + l2_gradient * self.mu
-
 
 class VanillaGradientDescentReg(BaseDescentReg, VanillaGradientDescent):
     """
     Класс полного градиентного спуска с регуляризацией.
     """
 
-
 class StochasticDescentReg(BaseDescentReg, StochasticDescent):
     """
     Класс стохастического градиентного спуска с регуляризацией.
     """
-
 
 class MomentumDescentReg(BaseDescentReg, MomentumDescent):
     """
     Класс градиентного спуска с моментом и регуляризацией.
     """
 
-
 class AdamReg(BaseDescentReg, Adam):
     """
     Класс адаптивного градиентного алгоритма с регуляризацией (AdamReg).
     """
-
 
 def get_descent(descent_config: dict) -> BaseDescent:
     """
@@ -589,6 +578,7 @@ def get_descent(descent_config: dict) -> BaseDescent:
     >>> isinstance(descent, BaseDescent)
     True
     """
+
     descent_name = descent_config.get('descent_name', 'full')
     regularized = descent_config.get('regularized', False)
 
